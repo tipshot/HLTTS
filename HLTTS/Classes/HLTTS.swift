@@ -59,7 +59,7 @@ public struct HLTTSAvailableVoice {
 
 /// 语音类型枚举，推荐使用 dynamic 动态获取音色或 custom 自定义 identifier
 public enum HLTTSVoiceType {
-    case custom(identifier: String)
+    case custom(identifier: String, displayName: String)
     case dynamic(identifier: String, displayName: String)
 }
 
@@ -118,7 +118,7 @@ public class HLTTS: NSObject {
     }
     
     /// 语音类型，默认Ting-Ting女声
-    public var voiceType: HLTTSVoiceType = .custom(identifier: "com.apple.ttsbundle.Ting-Ting-compact")
+    public var voiceType: HLTTSVoiceType = .custom(identifier: "com.apple.ttsbundle.Ting-Ting-compact",displayName: "田田")
 
     private let synthesizer = AVSpeechSynthesizer()
     private var currentText: String = ""
@@ -162,7 +162,7 @@ public class HLTTS: NSObject {
         
         // 根据voiceType设置utterance.voice
         switch voiceType {
-        case .custom(let identifier):
+        case .custom(let identifier, _):
             if let voice = AVSpeechSynthesisVoice(identifier: identifier) {
                 utterance.voice = voice
             } else {
@@ -227,7 +227,10 @@ public class HLTTS: NSObject {
                 return true
             }
             .map { voice in
-                return .dynamic(identifier: voice.identifier, displayName: "\(voice.name) (\(voice.language))")
+                let tempVoice = HLTTSVoiceType.dynamic(identifier: voice.identifier, displayName: voice.name)
+                let friendly = friendlyName(for: tempVoice)
+                print("tempVoice:\(tempVoice),friendly:\(friendly)")
+                return .dynamic(identifier: voice.identifier, displayName: friendly)
             }
     }
     
@@ -237,25 +240,54 @@ public class HLTTS: NSObject {
     public func friendlyName(for voice: HLTTSVoiceType) -> String {
         // 映射表，可根据需求扩展
         let voiceNameMap: [String: String] = [
-            "com.apple.ttsbundle.Ting-Ting-compact": "婷婷",
+            "com.apple.ttsbundle.Ting-Ting-compact": "田田",
+            "com.apple.ttsbundle.siri_Li-mu_zh-CN_compact": "李牧",
             "com.apple.ttsbundle.siri_limu_zh-CN_compact": "李牧",
             "com.apple.ttsbundle.siri_Yu-shu_zh-CN_compact": "语舒",
             "com.apple.ttsbundle.Sin-Ji-compact": "小志",
             "com.apple.ttsbundle.Mei-Jia-premium": "美嘉（增强版）",
-            "com.apple.ttsbundle.Mei-Jia-compact": "美嘉"
+            "com.apple.voice.premium.zh-CN.Yue": "月（高音质）",
+            "com.apple.voice.premium.zh-CN.Yun": "Yun（高音质）",
+            "com.apple.ttsbundle.Mei-Jia-compact": "美嘉（品质）",
+            "com.apple.eloquence.zh-CN.Eddy": "Eddy",
+            "com.apple.eloquence.zh-CN.Shelley": "Shelley",
+            "com.apple.eloquence.zh-CN.Grandma": "Grandma",
+            "com.apple.eloquence.zh-CN.Reed": "Reed",
+            "com.apple.eloquence.zh-CN.Grandpa": "Grandpa",
+            "com.apple.eloquence.zh-CN.Rocko": "Rocko",
+            "com.apple.eloquence.zh-CN.Flo": "Flo",
+            "com.apple.voice.compact.zh-CN.Tingting": "婷婷",
+            "com.apple.eloquence.zh-CN.Sandy": "Sandy",
+            "com.apple.voice.compact.zh-CN-u-sd-cnsc.Fangfang": "盼盼",
+            "com.apple.voice.compact.zh-HK.Sinji": "善怡",
+            "com.apple.eloquence.zh-TW.Shelley": "Shelley",
+            "com.apple.eloquence.zh-TW.Grandma": "Grandma",
+            "com.apple.eloquence.zh-TW.Grandpa": "Grandpa",
+            "com.apple.eloquence.zh-TW.Sandy": "Sandy",
+            "com.apple.eloquence.zh-TW.Flo": "Flo",
+            "com.apple.eloquence.zh-TW.Eddy": "Eddy",
+            "com.apple.eloquence.zh-TW.Reed": "Reed",
+            "com.apple.voice.compact.zh-TW.Meijia": "美嘉",
+            "com.apple.eloquence.zh-TW.Rocko": "Rocko"
         ]
-        
+
         switch voice {
-        case .dynamic(let identifier, _),
-             .custom(let identifier):
+        case .dynamic(let identifier, let displayName), .custom(let identifier, let displayName):
             // 优先使用映射表
-            if let name = voiceNameMap[identifier] {
-                return name
+            if let mappedName = voiceNameMap[identifier] {
+                return mappedName
             }
-            // fallback: 去掉 displayName 中的语言部分
-            if case .dynamic(_, let display) = voice, let parenIndex = display.firstIndex(of: "(") {
-                return String(display[..<parenIndex]).trimmingCharacters(in: .whitespaces)
+            
+            // fallback: dynamic 类型使用 displayName 去掉括号中的语言部分
+            if case .dynamic(_, let display) = voice {
+                if let parenIndex = display.firstIndex(of: "(") {
+                    return String(display[..<parenIndex]).trimmingCharacters(in: .whitespaces)
+                } else {
+                    return display
+                }
             }
+            
+            // fallback: custom 类型或 dynamic 没有 displayName，直接返回 identifier
             return identifier
         }
     }
@@ -263,7 +295,7 @@ public class HLTTS: NSObject {
     /// 获取系统默认的中文女声音色（Ting-Ting），如果不可用返回 nil
     public func defaultFemaleVoice() -> HLTTSVoiceType? {
         if let voice = AVSpeechSynthesisVoice(identifier: "com.apple.ttsbundle.Ting-Ting-compact") {
-            return .custom(identifier: voice.identifier)
+            return .custom(identifier: voice.identifier,displayName: "田田")
         }
         return nil
     }
@@ -271,7 +303,7 @@ public class HLTTS: NSObject {
     /// 获取系统默认的中文男声音色（Li-Mu），如果不可用返回 nil
     public func defaultMaleVoice() -> HLTTSVoiceType? {
         if let voice = AVSpeechSynthesisVoice(identifier: "com.apple.ttsbundle.siri_limu_zh-CN_compact") {
-            return .custom(identifier: voice.identifier)
+            return .custom(identifier: voice.identifier,displayName: "李牧")
         }
         return nil
     }
@@ -316,50 +348,3 @@ extension HLTTS: AVSpeechSynthesizerDelegate {
         delegate?.didUpdateProgress(text: utterance.speechString, progress: progress)
     }
 }
-
-/*
-// 示例用法:
-class ViewController: UIViewController, HLTTSDelegate {
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        HLTTS.shared.delegate = self
-        HLTTS.shared.rate = 0.5
-        HLTTS.shared.pitch = 1.0
-        HLTTS.shared.volume = 1.0
-        
-        // 使用动态获取的男声音色示例
-        let maleVoices = HLTTSAvailableVoice.maleChineseVoices()
-        if let firstMaleVoice = maleVoices.first {
-            HLTTS.shared.voiceType = .custom(identifier: firstMaleVoice.identifier)
-        } else {
-            HLTTS.shared.voiceType = .custom(identifier: "com.apple.ttsbundle.siri_limu_zh-CN_compact")
-        }
-        HLTTS.shared.speak(text: "你好，使用动态获取的男声音色。")
-        
-        // 直接播放文本，打断当前播放
-        HLTTS.shared.speak(text: "你好，欢迎使用系统TTS。")
-        // 追加多个文本到播放队列中，顺序播放，不打断当前播放
-        HLTTS.shared.speak(text: "这是第一段追加文本。", enqueue: true, interrupt: false)
-        HLTTS.shared.speak(text: "这是第二段追加文本。", enqueue: true, interrupt: false)
-        
-        // 切换到台湾普通话
-        // HLTTS.shared.voiceType = .custom(identifier: "com.apple.ttsbundle.SomeTaiwaneseVoiceIdentifier")
-        // HLTTS.shared.speak(text: "這是臺灣普通話的語音。")
-        
-        // 切换到粤语
-        // HLTTS.shared.voiceType = .custom(identifier: "com.apple.ttsbundle.SomeCantoneseVoiceIdentifier")
-        // HLTTS.shared.speak(text: "呢個係廣東話嘅語音。")
-        
-        // 使用自定义音色
-        // HLTTS.shared.voiceType = .custom(identifier: "com.apple.ttsbundle.SomeCustomVoice-compact")
-        // HLTTS.shared.speak(text: "自定义音色示例。")
-    }
-    func didStart(text: String) { print("开始: \(text)") }
-    func didFinish(text: String) { print("完成: \(text)") }
-    func didPause(text: String) { print("暂停: \(text)") }
-    func didContinue(text: String) { print("继续: \(text)") }
-    func didCancel(text: String) { print("取消: \(text)") }
-    func didUpdateProgress(text: String, progress: Float) { print("进度: \(progress * 100)% - \(text)") }
-    func didFail(text: String, error: Error) { print("失败: \(error.localizedDescription) - \(text)") }
-}
-*/
