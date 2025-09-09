@@ -29,6 +29,10 @@ class ViewController: UIViewController {
         voicePicker.dataSource = self
         HLTTS.shared.delegate = self
         setVoiceType()
+        // 点击空白收起键盘
+        let tapGesture = UITapGestureRecognizer(target: self, action: #selector(dismissKeyboard))
+        tapGesture.cancelsTouchesInView = false
+        view.addGestureRecognizer(tapGesture)
     }
 
     override func didReceiveMemoryWarning() {
@@ -47,6 +51,10 @@ class ViewController: UIViewController {
             return
         }
         HLTTS.shared.speak(text: contentTextView.text)
+    }
+    
+    @objc private func dismissKeyboard() {
+        view.endEditing(true)
     }
     
 }
