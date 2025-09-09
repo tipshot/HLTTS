@@ -221,15 +221,16 @@ public class HLTTS: NSObject {
     public func availableVoiceTypes(language: HLTTSLanguage = .all) -> [HLTTSVoiceType] {
         return AVSpeechSynthesisVoice.speechVoices()
             .filter { voice in
+                // 过滤语言
                 if language != .all {
-                    return voice.language.lowercased().hasPrefix(language.rawValue.lowercased())
+                    guard voice.language.lowercased().hasPrefix(language.rawValue.lowercased()) else { return false }
                 }
-                return true
+                // 过滤掉 Eloquence 系列
+                return !voice.identifier.lowercased().contains("eloquence")
             }
             .map { voice in
                 let tempVoice = HLTTSVoiceType.dynamic(identifier: voice.identifier, displayName: voice.name)
                 let friendly = friendlyName(for: tempVoice)
-                print("tempVoice:\(tempVoice),friendly:\(friendly)")
                 return .dynamic(identifier: voice.identifier, displayName: friendly)
             }
     }
@@ -245,30 +246,15 @@ public class HLTTS: NSObject {
             "com.apple.ttsbundle.siri_limu_zh-CN_compact": "李牧",
             "com.apple.ttsbundle.siri_Yu-shu_zh-CN_compact": "语舒",
             "com.apple.ttsbundle.Sin-Ji-compact": "小志",
-            "com.apple.ttsbundle.Mei-Jia-premium": "美嘉（增强版）",
-            "com.apple.voice.premium.zh-CN.Yue": "月（高音质）",
-            "com.apple.voice.premium.zh-CN.Yun": "Yun（高音质）",
             "com.apple.ttsbundle.Mei-Jia-compact": "美嘉（品质）",
-            "com.apple.eloquence.zh-CN.Eddy": "Eddy",
-            "com.apple.eloquence.zh-CN.Shelley": "Shelley",
-            "com.apple.eloquence.zh-CN.Grandma": "Grandma",
-            "com.apple.eloquence.zh-CN.Reed": "Reed",
-            "com.apple.eloquence.zh-CN.Grandpa": "Grandpa",
-            "com.apple.eloquence.zh-CN.Rocko": "Rocko",
-            "com.apple.eloquence.zh-CN.Flo": "Flo",
+            "com.apple.ttsbundle.Mei-Jia-premium": "美嘉（增强版）",
+            
+            "com.apple.voice.premium.zh-CN.Yue": "月（高音质）",
+            "com.apple.voice.premium.zh-CN.Yun": "云（高音质）",
             "com.apple.voice.compact.zh-CN.Tingting": "婷婷",
-            "com.apple.eloquence.zh-CN.Sandy": "Sandy",
             "com.apple.voice.compact.zh-CN-u-sd-cnsc.Fangfang": "盼盼",
             "com.apple.voice.compact.zh-HK.Sinji": "善怡",
-            "com.apple.eloquence.zh-TW.Shelley": "Shelley",
-            "com.apple.eloquence.zh-TW.Grandma": "Grandma",
-            "com.apple.eloquence.zh-TW.Grandpa": "Grandpa",
-            "com.apple.eloquence.zh-TW.Sandy": "Sandy",
-            "com.apple.eloquence.zh-TW.Flo": "Flo",
-            "com.apple.eloquence.zh-TW.Eddy": "Eddy",
-            "com.apple.eloquence.zh-TW.Reed": "Reed",
-            "com.apple.voice.compact.zh-TW.Meijia": "美嘉",
-            "com.apple.eloquence.zh-TW.Rocko": "Rocko"
+            "com.apple.voice.compact.zh-TW.Meijia": "美嘉"
         ]
 
         switch voice {
