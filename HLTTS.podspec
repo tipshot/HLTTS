@@ -4,7 +4,7 @@
 #
 # Any lines starting with a # are optional, but their use is encouraged
 # To learn more about a Podspec see https://guides.cocoapods.org/syntax/podspec.html
-#
+# pod repo push CZSpecs HLTTS.podspec --allow-warnings --verbose --sources=https://github.com/tipshot/HLTTS.git --skip-import-validation
 
 Pod::Spec.new do |s|
   s.name             = 'HLTTS'
