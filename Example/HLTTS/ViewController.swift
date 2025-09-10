@@ -51,9 +51,11 @@ class ViewController: UIViewController {
             return
         }
         HLTTS.shared.speak(text: contentTextView.text)
-//        HLTTS.shared.speak(text: "2025中国银行北京马拉松")
-//        HLTTS.shared.speak(text: "恭喜您，您已跑了2025.6km，请注意跑后拉伸")
-//        HLTTS.shared.speak(text: "恭喜您，您已完成2025中国银行北京马拉松-3KM项目，总共用时2小时4分32秒，平均配速5分20秒，公里配速6′23″，旋转角度为54°")    }
+        //        HLTTS.shared.speak(text: "2025中国银行北京马拉松")
+        //        HLTTS.shared.speak(text: "恭喜您，您已跑了2025.6km，请注意跑后拉伸")
+        //        let text = "恭喜您，您已完成2025中国银行北京马拉松-3KM项目，总共用时2小时4分32秒，平均配速5分20秒，公里配速25′23″，左旋转角度为5°，右旋转角度为2025°,单位2026".toChineseReadable_HLTTS()
+        //        HLTTS.shared.speak(text:text )
+    }
     
     @objc private func dismissKeyboard() {
         view.endEditing(true)

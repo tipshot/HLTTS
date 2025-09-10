@@ -22,7 +22,7 @@ public extension String {
     /// - "2025-2026" → "二零二五、二零二六"
     ///
     /// - Returns: 转换后的中文可读字符串
-    public func toChineseReadable() -> String {
+    func toChineseReadable_HLTTS() -> String {
         // 数字到中文映射
         let numMap: [Character: String] = [
             "0": "零", "1": "一", "2": "二", "3": "三", "4": "四",
