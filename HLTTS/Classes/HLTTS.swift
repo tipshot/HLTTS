@@ -181,6 +181,15 @@ public class HLTTS: NSObject {
         utterance.volume = volume
 
         if interrupt {
+            // 只有在上一个还在播放时，才调用失败回调
+            if synthesizer.isSpeaking, let oldHandler = completionHandler {
+                let error = NSError(domain: "HLTTS",
+                                    code: -3,
+                                    userInfo: [NSLocalizedDescriptionKey: "播放被新任务打断"])
+                oldHandler(.failure(error))
+                completionHandler = nil
+            }
+            
             utteranceQueue.removeAll()
             stop()
             currentText = text
