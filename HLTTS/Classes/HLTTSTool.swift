@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import AVFoundation
 
 public extension String {
     /// 将字符串中的特定内容转换为更易读的中文形式：
@@ -51,3 +52,27 @@ public extension String {
         return result
     }
 }
+
+/// 开启 Duck（压低其他 App 音量）
+func startDuckOthers() {
+    let session = AVAudioSession.sharedInstance()
+    do {
+        try session.setCategory(.playback,
+                                options: [.duckOthers, .mixWithOthers])
+        try session.setActive(true)
+    } catch {
+        print("❌ 设置 Duck 音频会话失败: \(error.localizedDescription)")
+    }
+}
+
+/// 停止 Duck（恢复其他 App 音量）
+func stopDuckOthers() {
+    let session = AVAudioSession.sharedInstance()
+    do {
+        try session.setActive(false,
+                              options: .notifyOthersOnDeactivation)
+    } catch {
+        print("❌ 停用 Duck 音频会话失败: \(error.localizedDescription)")
+    }
+}
+

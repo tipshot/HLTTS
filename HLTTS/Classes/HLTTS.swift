@@ -156,6 +156,9 @@ public class HLTTS: NSObject {
             completion?(.failure(error))
             return
         }
+        
+        startDuckOthers() // 掩盖其他声音
+        
         let utterance = AVSpeechUtterance(string: text)
         
         self.completionHandler = completion
@@ -317,6 +320,8 @@ extension HLTTS: AVSpeechSynthesizerDelegate {
             let nextUtterance = utteranceQueue.removeFirst()
             currentText = nextUtterance.speechString
             synthesizer.speak(nextUtterance)
+        } else {
+            stopDuckOthers()
         }
     }
     public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didPause utterance: AVSpeechUtterance) {
@@ -334,6 +339,8 @@ extension HLTTS: AVSpeechSynthesizerDelegate {
             let nextUtterance = utteranceQueue.removeFirst()
             currentText = nextUtterance.speechString
             synthesizer.speak(nextUtterance)
+        } else {
+            stopDuckOthers()
         }
     }
     public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, willSpeakRangeOfSpeechString characterRange: NSRange, utterance: AVSpeechUtterance) {
