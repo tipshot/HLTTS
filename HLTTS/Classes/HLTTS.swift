@@ -8,6 +8,17 @@
 import Foundation
 import AVFoundation
 
+/// 播放状态
+public enum HLTTSPlayState {
+    case start(text: String)
+    case finish(text: String)
+    case pause(text: String)
+    case `continue`(text: String)
+    case cancel(text: String)
+    case progress(text: String, progress: Float)
+    case fail(text: String, error: Error)
+}
+
 /// TTS回调协议
 public protocol HLTTSDelegate: AnyObject {
     /// 开始播放
@@ -24,6 +35,8 @@ public protocol HLTTSDelegate: AnyObject {
     func didUpdateProgress(text: String, progress: Float)
     /// 播放失败
     func didFail(text: String, error: Error)
+    /// 统一的播放状态更新回调
+    func didUpdateState(_ state: HLTTSPlayState)
 }
 
 /// 可用语音结构体
@@ -94,6 +107,9 @@ public class HLTTS: NSObject {
     public typealias SpeakCompletion = (Result<String, Error>) -> Void
 
     public weak var delegate: HLTTSDelegate?
+    
+    /// 外界可设置的状态回调
+    public var stateCallback: ((HLTTSPlayState) -> Void)?
 
     /// 语速，默认0.5（0.0~1.0）
     public var rate: Float = AVSpeechUtteranceDefaultSpeechRate {
@@ -118,7 +134,7 @@ public class HLTTS: NSObject {
     }
     
     /// 语音类型，默认Ting-Ting女声
-    public var voiceType: HLTTSVoiceType = .custom(identifier: "com.apple.ttsbundle.Ting-Ting-compact",displayName: "田田")
+    public var voiceType: HLTTSVoiceType = .custom(identifier: "",displayName: "")
 
     private let synthesizer = AVSpeechSynthesizer()
     private var currentText: String = ""
@@ -153,6 +169,8 @@ public class HLTTS: NSObject {
         if text.isEmpty {
             let error = NSError(domain: "HLTTS", code: -1, userInfo: [NSLocalizedDescriptionKey: "文本为空"])
             delegate?.didFail(text: text, error: error)
+            delegate?.didUpdateState(.fail(text: text, error: error))
+            stateCallback?(.fail(text: text, error: error))
             completion?(.failure(error))
             return
         }
@@ -190,6 +208,8 @@ public class HLTTS: NSObject {
                                     code: -3,
                                     userInfo: [NSLocalizedDescriptionKey: "播放被新任务打断"])
                 oldHandler(.failure(error))
+                delegate?.didUpdateState(.fail(text: currentText, error: error))
+                stateCallback?(.fail(text: currentText, error: error))
                 completionHandler = nil
             }
             
@@ -253,16 +273,17 @@ public class HLTTS: NSObject {
     public func friendlyName(for voice: HLTTSVoiceType) -> String {
         // 映射表，可根据需求扩展
         let voiceNameMap: [String: String] = [
-            "com.apple.ttsbundle.Ting-Ting-compact": "田田",
+//            "com.apple.ttsbundle.Ting-Ting-compact": "婷婷（品质）",
             "com.apple.ttsbundle.siri_Li-mu_zh-CN_compact": "李牧",
             "com.apple.ttsbundle.siri_limu_zh-CN_compact": "李牧",
-            "com.apple.ttsbundle.siri_Yu-shu_zh-CN_compact": "语舒",
-            "com.apple.ttsbundle.Sin-Ji-compact": "小志",
-            "com.apple.ttsbundle.Mei-Jia-compact": "美嘉（品质）",
+//            "com.apple.ttsbundle.siri_Yu-shu_zh-CN_compact": "语舒",
+//            "com.apple.ttsbundle.Sin-Ji-compact": "善怡",
+//            "com.apple.ttsbundle.Mei-Jia-compact": "善怡",
+//            "com.apple.ttsbundle.Mei-Jia-compact": "美嘉",
             "com.apple.ttsbundle.Mei-Jia-premium": "美嘉（增强版）",
             
             "com.apple.voice.premium.zh-CN.Yue": "月（高音质）",
-            "com.apple.voice.premium.zh-CN.Yun": "云（高音质）",
+//            "com.apple.voice.premium.zh-CN.Yun": "云（高音质）",
             "com.apple.voice.compact.zh-CN.Tingting": "婷婷",
             "com.apple.voice.compact.zh-CN-u-sd-cnsc.Fangfang": "盼盼",
             "com.apple.voice.compact.zh-HK.Sinji": "善怡",
@@ -290,30 +311,19 @@ public class HLTTS: NSObject {
         }
     }
     
-    /// 获取系统默认的中文女声音色（Ting-Ting），如果不可用返回 nil
-    public func defaultFemaleVoice() -> HLTTSVoiceType? {
-        if let voice = AVSpeechSynthesisVoice(identifier: "com.apple.ttsbundle.Ting-Ting-compact") {
-            return .custom(identifier: voice.identifier,displayName: "田田")
-        }
-        return nil
-    }
-
-    /// 获取系统默认的中文男声音色（Li-Mu），如果不可用返回 nil
-    public func defaultMaleVoice() -> HLTTSVoiceType? {
-        if let voice = AVSpeechSynthesisVoice(identifier: "com.apple.ttsbundle.siri_limu_zh-CN_compact") {
-            return .custom(identifier: voice.identifier,displayName: "李牧")
-        }
-        return nil
-    }
 }
 
 // MARK: - AVSpeechSynthesizerDelegate
 extension HLTTS: AVSpeechSynthesizerDelegate {
     public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
         delegate?.didStart(text: utterance.speechString)
+        delegate?.didUpdateState(.start(text: utterance.speechString))
+        stateCallback?(.start(text: utterance.speechString))
     }
     public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
         delegate?.didFinish(text: utterance.speechString)
+        delegate?.didUpdateState(.finish(text: utterance.speechString))
+        stateCallback?(.finish(text: utterance.speechString))
         completionHandler?(.success(utterance.speechString))
         completionHandler = nil
         if !utteranceQueue.isEmpty {
@@ -326,13 +336,21 @@ extension HLTTS: AVSpeechSynthesizerDelegate {
     }
     public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didPause utterance: AVSpeechUtterance) {
         delegate?.didPause(text: utterance.speechString)
+        delegate?.didUpdateState(.pause(text: utterance.speechString))
+        stateCallback?(.pause(text: utterance.speechString))
     }
     public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didContinue utterance: AVSpeechUtterance) {
         delegate?.didContinue(text: utterance.speechString)
+        delegate?.didUpdateState(.continue(text: utterance.speechString))
+        stateCallback?(.continue(text: utterance.speechString))
     }
     public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
         delegate?.didCancel(text: utterance.speechString)
         let error = NSError(domain: "HLTTS", code: -2, userInfo: [NSLocalizedDescriptionKey: "播放被取消"])
+        delegate?.didUpdateState(.cancel(text: utterance.speechString))
+        stateCallback?(.cancel(text: utterance.speechString))
+        delegate?.didUpdateState(.fail(text: utterance.speechString, error: error))
+        stateCallback?(.fail(text: utterance.speechString, error: error))
         completionHandler?(.failure(error))
         completionHandler = nil
         if !utteranceQueue.isEmpty {
@@ -348,5 +366,7 @@ extension HLTTS: AVSpeechSynthesizerDelegate {
         guard length > 0 else { return }
         let progress = Float(characterRange.location + characterRange.length) / Float(length)
         delegate?.didUpdateProgress(text: utterance.speechString, progress: progress)
+        delegate?.didUpdateState(.progress(text: utterance.speechString, progress: progress))
+        stateCallback?(.progress(text: utterance.speechString, progress: progress))
     }
 }
