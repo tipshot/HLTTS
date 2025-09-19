@@ -44,30 +44,6 @@ public struct HLTTSAvailableVoice {
     public let name: String
     public let language: String
     public let identifier: String
-    
-    public static func allVoices() -> [HLTTSAvailableVoice] {
-        return AVSpeechSynthesisVoice.speechVoices().map {
-            HLTTSAvailableVoice(name: $0.name, language: $0.language, identifier: $0.identifier)
-        }
-    }
-    
-    public static func chineseVoices() -> [HLTTSAvailableVoice] {
-        return allVoices().filter { $0.language.hasPrefix("zh") }
-    }
-    
-    public static func maleChineseVoices() -> [HLTTSAvailableVoice] {
-        return chineseVoices().filter {
-            let lowerName = $0.name.lowercased()
-            return lowerName.contains("li-mu") || lowerName.contains("eddy")
-        }
-    }
-    
-    public static func femaleChineseVoices() -> [HLTTSAvailableVoice] {
-        return chineseVoices().filter {
-            let lowerName = $0.name.lowercased()
-            return lowerName.contains("ting-ting") || lowerName.contains("ting ting") || lowerName.contains("tingting")
-        }
-    }
 }
 
 /// 语音类型枚举，推荐使用 dynamic 动态获取音色或 custom 自定义 identifier
@@ -133,7 +109,7 @@ public class HLTTS: NSObject {
         }
     }
     
-    /// 语音类型，默认Ting-Ting女声
+    /// 语音类型
     public var voiceType: HLTTSVoiceType = .custom(identifier: "",displayName: "")
 
     private let synthesizer = AVSpeechSynthesizer()
@@ -145,6 +121,7 @@ public class HLTTS: NSObject {
         super.init()
         configureAudioSession()
         synthesizer.delegate = self
+        normalSet()
     }
     
     private func configureAudioSession() {
@@ -251,6 +228,7 @@ public class HLTTS: NSObject {
     }
     
     public func availableVoiceTypes(language: HLTTSLanguage = .all) -> [HLTTSVoiceType] {
+
         return AVSpeechSynthesisVoice.speechVoices()
             .filter { voice in
                 // 过滤语言
@@ -258,9 +236,11 @@ public class HLTTS: NSObject {
                     guard voice.language.lowercased().hasPrefix(language.rawValue.lowercased()) else { return false }
                 }
                 // 过滤掉 Eloquence 系列
-                return !voice.identifier.lowercased().contains("eloquence")
+                let banned = ["eloquence"]
+                return !banned.contains(where: { voice.identifier.lowercased().contains($0) })
             }
             .map { voice in
+                print("\(voice.identifier) | \(voice.name) | \(voice.language)")
                 let tempVoice = HLTTSVoiceType.dynamic(identifier: voice.identifier, displayName: voice.name)
                 let friendly = friendlyName(for: tempVoice)
                 return .dynamic(identifier: voice.identifier, displayName: friendly)
@@ -368,5 +348,28 @@ extension HLTTS: AVSpeechSynthesizerDelegate {
         delegate?.didUpdateProgress(text: utterance.speechString, progress: progress)
         delegate?.didUpdateState(.progress(text: utterance.speechString, progress: progress))
         stateCallback?(.progress(text: utterance.speechString, progress: progress))
+    }
+}
+
+extension HLTTS {
+    
+    // 设置默认语音
+    private func normalSet(){
+        let voiceTypes = availableVoiceTypes(language: .chinese)
+        var voiceTypeIdentifier = UserDefaults.standard.value(forKey: "HLTTSVoiceType") as? String
+            // 如果没有存储，取 voiceTypes 第一个 case 的 identifier
+        if voiceTypeIdentifier == nil, let firstVoice = voiceTypes.first {
+            switch firstVoice {
+            case .dynamic(let id, _):
+                voiceTypeIdentifier = id
+            case .custom(let id, _):
+                voiceTypeIdentifier = id
+            }
+            UserDefaults.standard.setValue(voiceTypeIdentifier, forKey: "HLTTSVoiceType")
+        }
+        // 直接设置 shared.voiceType，保证初始化时生效
+        if let id = voiceTypeIdentifier {
+            self.voiceType = .dynamic(identifier: id, displayName: "")
+        }
     }
 }

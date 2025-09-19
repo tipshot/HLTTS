@@ -87,6 +87,10 @@ extension ViewController: UIPickerViewDelegate, UIPickerViewDataSource{
 
 
 extension ViewController:HLTTSDelegate {
+    func didUpdateState(_ state: HLTTSPlayState) {
+        print("statestate =\(state)")
+    }
+    
     
     func didUpdateProgress(text: String, progress: Float) {
         let percent = Int(progress * 100)
