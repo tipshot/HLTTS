@@ -116,12 +116,16 @@ public class HLTTS: NSObject {
     private var currentText: String = ""
     private var utteranceQueue: [AVSpeechUtterance] = []
     private var completionHandler: SpeakCompletion?
+    
+    // 💡 新增：专门处理 TTS 耗时任务的串行队列，避免阻塞主线程
+    private let ttsWorkQueue = DispatchQueue(label: "com.hltts.workQueue", qos: .userInitiated)
 
     override private init() {
         super.init()
         configureAudioSession()
         synthesizer.delegate = self
         normalSet()
+        prewarm() // 💡 触发预热机制
     }
     
     private func configureAudioSession() {
@@ -131,6 +135,14 @@ public class HLTTS: NSObject {
             try session.setActive(true)
         } catch {
             print("音频会话配置失败: \(error)")
+        }
+    }
+    
+    /// 💡 新增：预热语音引擎
+    private func prewarm() {
+        ttsWorkQueue.async {
+            // 随便初始化一个 voice，强制系统加载底层语音资源，避免首次 speak 时卡顿
+            _ = AVSpeechSynthesisVoice(language: "zh-CN")
         }
     }
 
@@ -152,57 +164,59 @@ public class HLTTS: NSObject {
             return
         }
         
-        startDuckOthers() // 掩盖其他声音
+        // 保存 completionHandler，稍后在主线程赋值，避免多线程数据竞争
+        let currentCompletion = completion
         
-        let utterance = AVSpeechUtterance(string: text)
-        
-        self.completionHandler = completion
-        
-        // 根据voiceType设置utterance.voice
-        switch voiceType {
-        case .custom(let identifier, _):
-            if let voice = AVSpeechSynthesisVoice(identifier: identifier) {
-                utterance.voice = voice
-            } else {
-                utterance.voice = AVSpeechSynthesisVoice(language: "zh-CN")
-            }
-        case .dynamic(let identifier, _):
-            if let voice = AVSpeechSynthesisVoice(identifier: identifier) {
-                utterance.voice = voice
-            } else {
-                utterance.voice = AVSpeechSynthesisVoice(language: "zh-CN")
-            }
-        }
-        
-        utterance.rate = rate
-        utterance.pitchMultiplier = pitch
-        utterance.volume = volume
-
-        if interrupt {
-            // 只有在上一个还在播放时，才调用失败回调
-            if synthesizer.isSpeaking, let oldHandler = completionHandler {
-                let error = NSError(domain: "HLTTS",
-                                    code: -3,
-                                    userInfo: [NSLocalizedDescriptionKey: "播放被新任务打断"])
-                oldHandler(.failure(error))
-                delegate?.didUpdateState(.fail(text: currentText, error: error))
-                stateCallback?(.fail(text: currentText, error: error))
-                completionHandler = nil
+        // 💡 核心优化：将耗时操作派发到后台队列
+        ttsWorkQueue.async { [weak self] in
+            guard let self = self else { return }
+            
+            // 耗时操作 1: 切换音频会话状态 (Duck)
+            startDuckOthers()
+            
+            // 耗时操作 2: 创建 Utterance 并查询 Voice
+            let utterance = AVSpeechUtterance(string: text)
+            
+            switch self.voiceType {
+            case .custom(let identifier, _), .dynamic(let identifier, _):
+                if let voice = AVSpeechSynthesisVoice(identifier: identifier) {
+                    utterance.voice = voice
+                } else {
+                    utterance.voice = AVSpeechSynthesisVoice(language: language)
+                }
             }
             
-            utteranceQueue.removeAll()
-            stop()
-            currentText = text
-            synthesizer.speak(utterance)
-        } else {
-            if synthesizer.isSpeaking {
-                if enqueue {
-                    utteranceQueue.append(utterance)
+            utterance.rate = self.rate
+            utterance.pitchMultiplier = self.pitch
+            utterance.volume = self.volume
+            // 💡 切回主线程：操作合成器 (synthesizer) 和处理队列，保障 UI 逻辑的线程安全
+            DispatchQueue.main.async {
+                self.completionHandler = currentCompletion
+                
+                if interrupt {
+                    // 只有在上一个还在播放时，才调用失败回调
+                    if self.synthesizer.isSpeaking, let oldHandler = self.completionHandler {
+                        let error = NSError(domain: "HLTTS", code: -3, userInfo: [NSLocalizedDescriptionKey: "播放被新任务打断"])
+                        oldHandler(.failure(error))
+                        self.delegate?.didUpdateState(.fail(text: self.currentText, error: error))
+                        self.stateCallback?(.fail(text: self.currentText, error: error))
+                        self.completionHandler = nil
+                    }
+                    
+                    self.utteranceQueue.removeAll()
+                    self.stop()
+                    self.currentText = text
+                    self.synthesizer.speak(utterance)
+                } else {
+                    if self.synthesizer.isSpeaking {
+                        if enqueue {
+                            self.utteranceQueue.append(utterance)
+                        }
+                    } else {
+                        self.currentText = text
+                        self.synthesizer.speak(utterance)
+                    }
                 }
-                // 如果不enqueue且正在播放，则不做任何操作
-            } else {
-                currentText = text
-                synthesizer.speak(utterance)
             }
         }
     }
@@ -253,17 +267,10 @@ public class HLTTS: NSObject {
     public func friendlyName(for voice: HLTTSVoiceType) -> String {
         // 映射表，可根据需求扩展
         let voiceNameMap: [String: String] = [
-//            "com.apple.ttsbundle.Ting-Ting-compact": "婷婷（品质）",
             "com.apple.ttsbundle.siri_Li-mu_zh-CN_compact": "李牧",
             "com.apple.ttsbundle.siri_limu_zh-CN_compact": "李牧",
-//            "com.apple.ttsbundle.siri_Yu-shu_zh-CN_compact": "语舒",
-//            "com.apple.ttsbundle.Sin-Ji-compact": "善怡",
-//            "com.apple.ttsbundle.Mei-Jia-compact": "善怡",
-//            "com.apple.ttsbundle.Mei-Jia-compact": "美嘉",
             "com.apple.ttsbundle.Mei-Jia-premium": "美嘉（增强版）",
-            
             "com.apple.voice.premium.zh-CN.Yue": "月（高音质）",
-//            "com.apple.voice.premium.zh-CN.Yun": "云（高音质）",
             "com.apple.voice.compact.zh-CN.Tingting": "婷婷",
             "com.apple.voice.compact.zh-CN-u-sd-cnsc.Fangfang": "盼盼",
             "com.apple.voice.compact.zh-HK.Sinji": "善怡",
@@ -311,7 +318,8 @@ extension HLTTS: AVSpeechSynthesizerDelegate {
             currentText = nextUtterance.speechString
             synthesizer.speak(nextUtterance)
         } else {
-            stopDuckOthers()
+            // 💡 异步恢复音频会话，避免此处短时卡顿
+            ttsWorkQueue.async { stopDuckOthers() }
         }
     }
     public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didPause utterance: AVSpeechUtterance) {
@@ -338,7 +346,8 @@ extension HLTTS: AVSpeechSynthesizerDelegate {
             currentText = nextUtterance.speechString
             synthesizer.speak(nextUtterance)
         } else {
-            stopDuckOthers()
+            // 💡 异步恢复音频会话
+            ttsWorkQueue.async { stopDuckOthers() }
         }
     }
     public func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, willSpeakRangeOfSpeechString characterRange: NSRange, utterance: AVSpeechUtterance) {
@@ -355,21 +364,27 @@ extension HLTTS {
     
     // 设置默认语音
     private func normalSet(){
-        let voiceTypes = availableVoiceTypes(language: .chinese)
-        var voiceTypeIdentifier = UserDefaults.standard.value(forKey: "HLTTSVoiceType") as? String
-            // 如果没有存储，取 voiceTypes 第一个 case 的 identifier
-        if voiceTypeIdentifier == nil, let firstVoice = voiceTypes.first {
-            switch firstVoice {
-            case .dynamic(let id, _):
-                voiceTypeIdentifier = id
-            case .custom(let id, _):
-                voiceTypeIdentifier = id
+        // 💡 核心优化：将首次读取 availableVoiceTypes 这种极其耗时的操作放入后台
+        ttsWorkQueue.async { [weak self] in
+            guard let self = self else { return }
+            let voiceTypes = self.availableVoiceTypes(language: .chinese)
+            var voiceTypeIdentifier = UserDefaults.standard.value(forKey: "HLTTSVoiceType") as? String
+                // 如果没有存储，取 voiceTypes 第一个 case 的 identifier
+            if voiceTypeIdentifier == nil, let firstVoice = voiceTypes.first {
+                switch firstVoice {
+                case .dynamic(let id, _):
+                    voiceTypeIdentifier = id
+                case .custom(let id, _):
+                    voiceTypeIdentifier = id
+                }
+                UserDefaults.standard.setValue(voiceTypeIdentifier, forKey: "HLTTSVoiceType")
             }
-            UserDefaults.standard.setValue(voiceTypeIdentifier, forKey: "HLTTSVoiceType")
-        }
-        // 直接设置 shared.voiceType，保证初始化时生效
-        if let id = voiceTypeIdentifier {
-            self.voiceType = .dynamic(identifier: id, displayName: "")
+            // 💡 切回主线程设置 voiceType
+            DispatchQueue.main.async {
+                if let id = voiceTypeIdentifier {
+                    self.voiceType = .dynamic(identifier: id, displayName: "")
+                }
+            }
         }
     }
 }
