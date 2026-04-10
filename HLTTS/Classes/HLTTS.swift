@@ -153,7 +153,7 @@ public class HLTTS: NSObject {
     ///   - interrupt: 是否打断当前播放，默认true
     ///   - enqueue: 是否追加到队列，默认false
     ///   - completion: 播放完成或失败的回调
-    public func speak(text: String, language: String = "zh-CN", interrupt: Bool = true, enqueue: Bool = false, completion: SpeakCompletion? = nil) {
+    public func speak(text: String, language: String = "zh-CN", interrupt: Bool = false, enqueue: Bool = true, completion: SpeakCompletion? = nil) {
 
         if text.isEmpty {
             let error = NSError(domain: "HLTTS", code: -1, userInfo: [NSLocalizedDescriptionKey: "文本为空"])
