@@ -53,12 +53,18 @@ public extension String {
     }
 }
 
+/// 播报期间使用的音频会话选项
+let hlttsCategoryOptions: AVAudioSession.CategoryOptions = [.duckOthers, .mixWithOthers]
+
 /// 开启 Duck（压低其他 App 音量）
 func startDuckOthers() {
     let session = AVAudioSession.sharedInstance()
     do {
-        try session.setCategory(.playback,
-                                options: [.duckOthers, .mixWithOthers])
+        // 幂等：category / options 已经是目标值就不再重设。
+        // 重设会触发音频路由重新配置，是播报出声前那几百毫秒延迟的来源之一
+        if session.category != .playback || session.categoryOptions != hlttsCategoryOptions {
+            try session.setCategory(.playback, options: hlttsCategoryOptions)
+        }
         try session.setActive(true)
     } catch {
         print("❌ 设置 Duck 音频会话失败: \(error.localizedDescription)")
@@ -66,6 +72,9 @@ func startDuckOthers() {
 }
 
 /// 停止 Duck（恢复其他 App 音量）
+/// ⚠️ 这是裸的停用原语，会立刻切断音频通路。
+/// 不要在播报结束时直接调用它 —— 走 `HLTTS.scheduleDeactivateSession()` 的延迟停用，
+/// 否则连续播报之间会反复停用/激活，下一条的开头会被吞掉。
 func stopDuckOthers() {
     let session = AVAudioSession.sharedInstance()
     do {
