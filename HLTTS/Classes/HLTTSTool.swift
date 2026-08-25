@@ -8,6 +8,25 @@
 import Foundation
 import AVFoundation
 
+/// 统一的诊断日志前缀。真机测试时在 Xcode 控制台筛选 `HLTTS_PROBE` 即可看到完整链路。
+///
+/// ⚠️ 默认关闭，由 `HLTTS.isProbeEnabled` 控制。一条播报会打 6~10 行，运动中每公里播报、
+/// 暂停继续都会触发，**不能常开**。
+/// ⚠️ 用运行时开关而不是 `#if DEBUG`：CocoaPods 会把 Test 配置当 release 编译，
+/// 编译开关在蒲公英包里就失效了，而真机排查恰恰主要用那种包。
+/// public 是为了让宿主 App 的运动链路共用同一个开关，不必各写一份。
+public func hlttsProbe(_ event: String) {
+    guard HLTTS.isProbeEnabled else { return }
+    let uptime = ProcessInfo.processInfo.systemUptime
+    let thread = Thread.isMainThread ? "main" : "background"
+    print(String(format: "[HLTTS_PROBE] t=%.3f thread=%@ %@", uptime, thread, event))
+}
+
+/// 只记录音频会话状态，不包含用户数据。
+public func hlttsAudioSessionSnapshot(_ session: AVAudioSession) -> String {
+    return "category=\(session.category.rawValue) mode=\(session.mode.rawValue) options=\(session.categoryOptions.rawValue) otherAudio=\(session.isOtherAudioPlaying) secondarySilenceHint=\(session.secondaryAudioShouldBeSilencedHint)"
+}
+
 public extension String {
     /// 将字符串中的特定内容转换为更易读的中文形式：
     /// 1. 四位年份数字（如 "2025"）→ 逐位中文读法（"二零二五"）。
@@ -111,6 +130,8 @@ let hlttsCategoryOptions: AVAudioSession.CategoryOptions = [.duckOthers, .mixWit
 /// 开启 Duck（压低其他 App 音量）
 func startDuckOthers() {
     let session = AVAudioSession.sharedInstance()
+    let categoryNeedsUpdate = session.category != .playback || session.categoryOptions != hlttsCategoryOptions
+    hlttsProbe("audioSession.activate.begin categoryNeedsUpdate=\(categoryNeedsUpdate) \(hlttsAudioSessionSnapshot(session))")
     do {
         // 幂等：category / options 已经是目标值就不再重设。
         // 重设会触发音频路由重新配置，是播报出声前那几百毫秒延迟的来源之一
@@ -118,7 +139,9 @@ func startDuckOthers() {
             try session.setCategory(.playback, options: hlttsCategoryOptions)
         }
         try session.setActive(true)
+        hlttsProbe("audioSession.activate.end \(hlttsAudioSessionSnapshot(session))")
     } catch {
+        hlttsProbe("audioSession.activate.error domain=\((error as NSError).domain) code=\((error as NSError).code)")
         print("❌ 设置 Duck 音频会话失败: \(error.localizedDescription)")
     }
 }
@@ -129,11 +152,13 @@ func startDuckOthers() {
 /// 否则连续播报之间会反复停用/激活，下一条的开头会被吞掉。
 func stopDuckOthers() {
     let session = AVAudioSession.sharedInstance()
+    hlttsProbe("audioSession.deactivate.begin \(hlttsAudioSessionSnapshot(session))")
     do {
         try session.setActive(false,
                               options: .notifyOthersOnDeactivation)
+        hlttsProbe("audioSession.deactivate.end \(hlttsAudioSessionSnapshot(session))")
     } catch {
+        hlttsProbe("audioSession.deactivate.error domain=\((error as NSError).domain) code=\((error as NSError).code)")
         print("❌ 停用 Duck 音频会话失败: \(error.localizedDescription)")
     }
 }
-
